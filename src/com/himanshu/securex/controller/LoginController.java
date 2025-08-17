@@ -38,7 +38,8 @@ public class LoginController {
 
             if (authManager.masterPasswordExists()) {
                 if (authManager.verifyPassword(pwd)) {
-                    switchToDashboard();
+                    // Pass the master password to the dashboard to unlock the vault.
+                    switchToDashboard(pwd);
                 } else {
                     showAlert(Alert.AlertType.ERROR, "Incorrect password");
                 }
@@ -60,8 +61,8 @@ public class LoginController {
         return view;
     }
 
-    private void switchToDashboard() {
-        DashboardController dashboardController = new DashboardController(stage);
+    private void switchToDashboard(char[] masterPassword) {
+        DashboardController dashboardController = new DashboardController(stage, masterPassword);
         Scene dashboardScene = new Scene(dashboardController.getView(), 800, 600);
 
         stage.setTitle("SecureX - Dashboard");
