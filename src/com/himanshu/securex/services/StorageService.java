@@ -46,7 +46,7 @@ public class StorageService {
         // 1. Write to a temporary file.
         Files.writeString(TEMP_FILE, encryptedData);
 
-        // 2. If the write was successful, replace the original file with the temporary one.
+        // 2. If the write to file was successful, replace the original file with the temporary one.
         // This move is an atomic operation on most file systems.
         Files.move(TEMP_FILE, VAULT_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }

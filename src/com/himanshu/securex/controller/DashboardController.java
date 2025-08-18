@@ -1,8 +1,10 @@
 package com.himanshu.securex.controller;
 
 import com.himanshu.securex.model.PasswordEntry;
+import com.himanshu.securex.services.AutoLockService;
 import com.himanshu.securex.services.CryptoService;
 import com.himanshu.securex.services.StorageService;
+import com.himanshu.securex.util.PasswordGenerator;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -20,6 +22,7 @@ public class DashboardController {
     private final BorderPane view;
     private final Stage stage;
     private final StorageService storageService;
+    private final AutoLockService autoLockService;
 
     private ObservableList<PasswordEntry> passwordEntries;
     private PasswordEntry currentlySelectedEntry = null;
@@ -31,7 +34,6 @@ public class DashboardController {
     private TextField plainPasswordField;
     private StackPane passwordContainer;
 
-    // --- UI State Nodes ---
     private GridPane detailsPane;
     private Label emptyStateLabel;
 
@@ -41,8 +43,14 @@ public class DashboardController {
         this.storageService = new StorageService(cryptoService);
         Arrays.fill(masterPassword, '\0');
 
+        this.autoLockService = new AutoLockService(5, this::performLogout);
+        this.autoLockService.start();
+
         this.view = new BorderPane();
         this.view.setPadding(new Insets(10));
+
+        this.view.setOnMouseMoved(e -> autoLockService.reset());
+        this.view.setOnKeyPressed(e -> autoLockService.reset());
 
         setupUI();
         loadEntries();
@@ -82,7 +90,6 @@ public class DashboardController {
         emptyStateLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: grey;");
         StackPane rightPane = new StackPane(emptyStateLabel, detailsPane);
 
-        // Set initial state
         detailsPane.setVisible(false);
         emptyStateLabel.setVisible(true);
 
@@ -120,7 +127,13 @@ public class DashboardController {
         grid.add(new Label("Username:"), 0, 1);
         grid.add(usernameField, 1, 1);
         grid.add(new Label("Password:"), 0, 2);
-        grid.add(passwordContainer, 1, 2);
+
+        Button generateButton = new Button("Generate");
+        generateButton.setOnAction(e -> handleGeneratePassword());
+        HBox passwordBox = new HBox(5, passwordContainer, generateButton);
+        HBox.setHgrow(passwordContainer, Priority.ALWAYS);
+        grid.add(passwordBox, 1, 2);
+
 
         Button saveButton = new Button("Save");
         saveButton.setOnAction(e -> saveCurrentEntry());
@@ -148,12 +161,28 @@ public class DashboardController {
         toggleButton.setStyle("-fx-font-size: 14px;");
         passwordField.visibleProperty().bind(toggleButton.selectedProperty().not());
 
-        HBox passwordBox = new HBox(5);
+        HBox passwordToggleBox = new HBox(5);
         StackPane fieldContainer = new StackPane(passwordField, plainPasswordField);
         HBox.setHgrow(fieldContainer, Priority.ALWAYS);
-        passwordBox.getChildren().addAll(fieldContainer, toggleButton);
+        passwordToggleBox.getChildren().addAll(fieldContainer, toggleButton);
 
-        passwordContainer = new StackPane(passwordBox);
+        passwordContainer = new StackPane(passwordToggleBox);
+    }
+
+    private void handleGeneratePassword() {
+        if (!passwordField.getText().isEmpty()) {
+            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+            alert.setTitle("Overwrite Password");
+            alert.setHeaderText("Are you sure you want to overwrite the current password? The saved password will not be changed until you click save.");
+            alert.setContentText("This action cannot be undone.");
+
+            Optional<ButtonType> result = alert.showAndWait();
+            if (result.isPresent() && result.get() == ButtonType.OK) {
+                passwordField.setText(PasswordGenerator.generatePassword(16));
+            }
+        } else {
+            passwordField.setText(PasswordGenerator.generatePassword(16));
+        }
     }
 
     private void handleNewEntryClick() {
@@ -235,6 +264,7 @@ public class DashboardController {
     }
 
     private void performLogout() {
+        autoLockService.stop();
         LoginController loginController = new LoginController(stage);
         Scene loginScene = new Scene(loginController.getView(), 300, 200);
         stage.setTitle("SecureX - Login");
