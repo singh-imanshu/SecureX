@@ -38,8 +38,14 @@ public class LoginController {
 
             if (authManager.masterPasswordExists()) {
                 if (authManager.verifyPassword(pwd)) {
-                    // Pass the master password to the dashboard to unlock the vault.
-                    switchToDashboard(pwd);
+                    // We need the salt to initialize the CryptoService
+                    byte[] salt = authManager.getSalt();
+                    if (salt != null) {
+                        // Pass the master password and salt to the dashboard to unlock the vault.
+                        switchToDashboard(pwd, salt);
+                    } else {
+                        showAlert(Alert.AlertType.ERROR, "Could not retrieve salt for decryption.");
+                    }
                 } else {
                     showAlert(Alert.AlertType.ERROR, "Incorrect password");
                 }
@@ -61,8 +67,8 @@ public class LoginController {
         return view;
     }
 
-    private void switchToDashboard(char[] masterPassword) {
-        DashboardController dashboardController = new DashboardController(stage, masterPassword);
+    private void switchToDashboard(char[] masterPassword, byte[] salt) {
+        DashboardController dashboardController = new DashboardController(stage, masterPassword, salt);
         Scene dashboardScene = new Scene(dashboardController.getView(), 800, 600);
 
         stage.setTitle("SecureX - Dashboard");

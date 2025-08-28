@@ -2,9 +2,11 @@ package com.himanshu.securex.controller;
 
 import com.himanshu.securex.model.PasswordEntry;
 import com.himanshu.securex.services.AutoLockService;
+import com.himanshu.securex.services.ClipboardService;
 import com.himanshu.securex.services.CryptoService;
 import com.himanshu.securex.services.StorageService;
 import com.himanshu.securex.util.PasswordGenerator;
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -13,6 +15,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -33,13 +36,14 @@ public class DashboardController {
     private PasswordField passwordField;
     private TextField plainPasswordField;
     private StackPane passwordContainer;
+    private Label feedbackLabel;
 
     private GridPane detailsPane;
     private Label emptyStateLabel;
 
-    public DashboardController(Stage stage, char[] masterPassword) {
+    public DashboardController(Stage stage, char[] masterPassword, byte[] salt) {
         this.stage = stage;
-        CryptoService cryptoService = new CryptoService(masterPassword);
+        CryptoService cryptoService = new CryptoService(masterPassword, salt);
         this.storageService = new StorageService(cryptoService);
         Arrays.fill(masterPassword, '\0');
 
@@ -54,6 +58,15 @@ public class DashboardController {
 
         setupUI();
         loadEntries();
+    }
+
+    // This constructor is for testing purposes
+    DashboardController(Stage stage, StorageService storageService) {
+        this.stage = stage;
+        this.storageService = storageService;
+        this.autoLockService = new AutoLockService(5, this::performLogout); // Dummy for testing
+        this.view = new BorderPane();
+        setupUI();
     }
 
     private void setupUI() {
@@ -93,10 +106,15 @@ public class DashboardController {
         detailsPane.setVisible(false);
         emptyStateLabel.setVisible(true);
 
-        entryListView.getSelectionModel().selectedItemProperty().addListener((obs, old, aNew) -> {
-            currentlySelectedEntry = aNew;
-            if (aNew != null) {
-                populateDetails(aNew);
+        entryListView.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            // Clear the fields before populating them with new data to minimize memory exposure.
+            if (oldSelection != null) {
+                clearDetailsFields();
+            }
+
+            currentlySelectedEntry = newSelection;
+            if (newSelection != null) {
+                populateDetails(newSelection);
                 detailsPane.setVisible(true);
                 emptyStateLabel.setVisible(false);
             } else {
@@ -122,18 +140,28 @@ public class DashboardController {
         usernameField = new TextField();
         createPasswordToggleField();
 
+        Button copyUserButton = new Button("Copy");
+        copyUserButton.setOnAction(e -> copyToClipboard(usernameField.getText(), "Username"));
+        HBox userBox = new HBox(5, usernameField, copyUserButton);
+        HBox.setHgrow(usernameField, Priority.ALWAYS);
+
+        Button copyPassButton = new Button("Copy");
+        copyPassButton.setOnAction(e -> copyToClipboard(passwordField.getText(), "Password"));
+        Button generateButton = new Button("Generate");
+        generateButton.setOnAction(e -> handleGeneratePassword());
+        HBox passwordBox = new HBox(5, passwordContainer, copyPassButton, generateButton);
+        HBox.setHgrow(passwordContainer, Priority.ALWAYS);
+
         grid.add(new Label("Account:"), 0, 0);
         grid.add(accountField, 1, 0);
         grid.add(new Label("Username:"), 0, 1);
-        grid.add(usernameField, 1, 1);
+        grid.add(userBox, 1, 1);
         grid.add(new Label("Password:"), 0, 2);
-
-        Button generateButton = new Button("Generate");
-        generateButton.setOnAction(e -> handleGeneratePassword());
-        HBox passwordBox = new HBox(5, passwordContainer, generateButton);
-        HBox.setHgrow(passwordContainer, Priority.ALWAYS);
         grid.add(passwordBox, 1, 2);
 
+        feedbackLabel = new Label();
+        feedbackLabel.setStyle("-fx-text-fill: green;");
+        grid.add(feedbackLabel, 1, 3);
 
         Button saveButton = new Button("Save");
         saveButton.setOnAction(e -> saveCurrentEntry());
@@ -145,7 +173,7 @@ public class DashboardController {
 
         HBox buttonBar = new HBox(10, deleteButton, saveButton);
         buttonBar.setAlignment(Pos.CENTER_RIGHT);
-        grid.add(buttonBar, 1, 3);
+        grid.add(buttonBar, 1, 4);
         return grid;
     }
 
@@ -170,19 +198,34 @@ public class DashboardController {
     }
 
     private void handleGeneratePassword() {
+        char[] generatedPassword = PasswordGenerator.generatePassword(16);
         if (!passwordField.getText().isEmpty()) {
             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
             alert.setTitle("Overwrite Password");
-            alert.setHeaderText("Are you sure you want to overwrite the current password? The saved password will not be changed until you click save.");
+            alert.setHeaderText("Are you sure you want to overwrite the current password?");
             alert.setContentText("This action cannot be undone.");
 
             Optional<ButtonType> result = alert.showAndWait();
             if (result.isPresent() && result.get() == ButtonType.OK) {
-                passwordField.setText(PasswordGenerator.generatePassword(16));
+                passwordField.setText(new String(generatedPassword));
             }
         } else {
-            passwordField.setText(PasswordGenerator.generatePassword(16));
+            passwordField.setText(new String(generatedPassword));
         }
+        Arrays.fill(generatedPassword, '\0'); // Clear the generated password from memory
+    }
+
+    private void copyToClipboard(String text, String fieldName) {
+        if (text == null || text.isEmpty()) return;
+        ClipboardService.copyToClipboard(text);
+        showFeedback(fieldName + " copied to clipboard.");
+    }
+
+    private void showFeedback(String message) {
+        feedbackLabel.setText(message);
+        PauseTransition pause = new PauseTransition(Duration.seconds(3));
+        pause.setOnFinished(e -> feedbackLabel.setText(""));
+        pause.play();
     }
 
     private void handleNewEntryClick() {
@@ -197,7 +240,7 @@ public class DashboardController {
     private void populateDetails(PasswordEntry entry) {
         accountField.setText(entry.getAccount());
         usernameField.setText(entry.getUsername());
-        passwordField.setText(entry.getPassword());
+        passwordField.setText(new String(entry.getPassword()));
     }
 
     private void clearDetailsFields() {
@@ -209,10 +252,11 @@ public class DashboardController {
     private void saveCurrentEntry() {
         String account = accountField.getText();
         String username = usernameField.getText();
-        String password = passwordField.getText();
+        char[] password = passwordField.getText().toCharArray();
 
-        if (account.trim().isEmpty() || username.trim().isEmpty() || password.trim().isEmpty()) {
+        if (account.trim().isEmpty() || username.trim().isEmpty() || password.length == 0) {
             showAlert(Alert.AlertType.ERROR, "All fields (Account, Username, Password) must be filled.");
+            Arrays.fill(password, '\0');
             return;
         }
 
@@ -226,6 +270,8 @@ public class DashboardController {
             passwordEntries.add(newEntry);
             entryListView.getSelectionModel().select(newEntry);
         }
+
+        Arrays.fill(password, '\0'); // Clear password from memory after use
         saveEntries();
     }
 
@@ -265,6 +311,12 @@ public class DashboardController {
 
     private void performLogout() {
         autoLockService.stop();
+        // Securely clear all password entries from memory before logging out
+        for (PasswordEntry entry : passwordEntries) {
+            entry.clearPassword();
+        }
+        passwordEntries.clear();
+
         LoginController loginController = new LoginController(stage);
         Scene loginScene = new Scene(loginController.getView(), 300, 200);
         stage.setTitle("SecureX - Login");

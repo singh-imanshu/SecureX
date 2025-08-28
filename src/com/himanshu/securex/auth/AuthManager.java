@@ -33,6 +33,7 @@ public class AuthManager {
 
     /**
      * Saves the master password hash to a secure file with restricted permissions.
+     *
      * @param password The master password to save.
      * @return true if saving was successful, false otherwise.
      */
@@ -59,6 +60,7 @@ public class AuthManager {
 
     /**
      * Verifies the provided master password against the stored hash.
+     *
      * @param password The master password to verify.
      * @return true if the password is correct, false otherwise.
      */
@@ -74,6 +76,24 @@ public class AuthManager {
             return false;
         } finally {
             Arrays.fill(password, '\0');
+        }
+    }
+
+    /**
+     * Retrieves the salt from the stored master password file.
+     *
+     * @return The salt, or null if an error occurs.
+     */
+    public byte[] getSalt() {
+        if (!masterPasswordExists()) {
+            return null;
+        }
+        try {
+            String storedHash = Files.readString(MASTER_FILE_PATH).trim();
+            return HashUtil.extractSalt(storedHash);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

@@ -77,4 +77,14 @@ public class HashUtil {
         new SecureRandom().nextBytes(salt);
         return salt;
     }
+
+    /**
+     * Extracts the salt from a Base64 encoded hash string.
+     * @param storedHash The stored hash string.
+     * @return The salt.
+     */
+    public static byte[] extractSalt(String storedHash) {
+        byte[] hashWithSalt = Base64.getDecoder().decode(storedHash);
+        return Arrays.copyOfRange(hashWithSalt, 0, SALT_SIZE);
+    }
 }

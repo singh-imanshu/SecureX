@@ -22,20 +22,19 @@ public class CryptoService {
     private static final String KEY_DERIVATION_ALGORITHM = "PBKDF2WithHmacSHA256";
     private static final int TAG_LENGTH_BIT = 128;
     private static final int IV_LENGTH_BYTE = 12;
-    private static final int SALT_LENGTH_BYTE = 16;
     private static final int ITERATION_COUNT = 65536;
     private static final int KEY_LENGTH = 256;
 
     private final SecretKey secretKey;
 
     /**
-     * Initializes the service by deriving a strong encryption key from the master password.
+     * Initializes the service by deriving a strong encryption key from the master password and a salt.
      * @param masterPassword The user's master password.
+     * @param salt The salt to use for key derivation.
      */
-    public CryptoService(char[] masterPassword) {
+    public CryptoService(char[] masterPassword, byte[] salt) {
         PBEKeySpec spec = null;
         try {
-            byte[] salt = "a-fixed-salt-for-securex".getBytes(StandardCharsets.UTF_8);
             SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_DERIVATION_ALGORITHM);
             spec = new PBEKeySpec(masterPassword, salt, ITERATION_COUNT, KEY_LENGTH);
             SecretKey tmp = factory.generateSecret(spec);
@@ -43,7 +42,6 @@ public class CryptoService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize CryptoService", e);
         } finally {
-            // Securely wipe all sensitive intermediate objects from memory.
             if (spec != null) {
                 spec.clearPassword();
             }
@@ -54,7 +52,7 @@ public class CryptoService {
     /**
      * Encrypts the given plaintext data.
      * @param plainText The data to encrypt.
-     * @return A Base64 encoded string of the encrypted data.
+     * @return A Base64 encoded string of the encrypted data (IV + ciphertext).
      */
     public String encrypt(String plainText) throws Exception {
         byte[] iv = new byte[IV_LENGTH_BYTE];
