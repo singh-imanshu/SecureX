@@ -17,8 +17,12 @@ import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class DashboardController {
 
@@ -81,10 +85,56 @@ public class DashboardController {
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button restoreBtn = new Button("Restore from Backup");
+        restoreBtn.setOnAction(e -> handleRestoreBackup());
+
         Button logoutBtn = new Button("Logout");
         logoutBtn.setOnAction(e -> performLogout());
-        topBar.getChildren().addAll(title, spacer, logoutBtn);
+
+        topBar.getChildren().addAll(title, spacer, restoreBtn, logoutBtn);
         return topBar;
+    }
+
+    private void handleRestoreBackup() {
+        try {
+            List<Path> backupFiles = storageService.getBackupFiles();
+            if (backupFiles.isEmpty()) {
+                showAlert(Alert.AlertType.INFORMATION, "No backups found.");
+                return;
+            }
+
+            List<String> backupChoices = backupFiles.stream()
+                    .map(p -> p.getFileName().toString())
+                    .collect(Collectors.toList());
+
+            ChoiceDialog<String> dialog = new ChoiceDialog<>(backupChoices.get(0), backupChoices);
+            dialog.setTitle("Restore Vault");
+            dialog.setHeaderText("Choose a backup to restore.");
+            dialog.setContentText("Warning: This will overwrite your current vault.");
+
+            Optional<String> result = dialog.showAndWait();
+            result.ifPresent(selectedBackupName -> {
+                try {
+                    Path selectedBackupFile = backupFiles.stream()
+                            .filter(p -> p.getFileName().toString().equals(selectedBackupName))
+                            .findFirst()
+                            .orElse(null);
+                    if (selectedBackupFile != null) {
+                        storageService.restoreFromBackup(selectedBackupFile);
+                        showAlert(Alert.AlertType.INFORMATION, "Vault restored successfully! Reloading data.");
+                        loadEntries(); // Reload the dashboard with the new data
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    showAlert(Alert.AlertType.ERROR, "Failed to restore backup.");
+                }
+            });
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            showAlert(Alert.AlertType.ERROR, "Could not read backup files.");
+        }
     }
 
     private SplitPane createMainContentArea() {

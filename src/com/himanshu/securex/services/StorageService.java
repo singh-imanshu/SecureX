@@ -21,16 +21,16 @@ import java.util.stream.Stream;
 
 /**
  * Manages the persistence of the encrypted password vault to the user's local filesystem.
-
+ *
  * This service is responsible for both loading the vault from disk and saving it securely.
-
  * It incorporates two critical data safety features:
+ *
  * 1. Automatic Encrypted Backups:
  * Before any save operation, the existing vault file is moved to a dedicated backups
  * directory with a timestamp. This creates a version history of the vault. The service
  * automatically prunes older backups, retaining only the most recent versions to prevent excessive disk usage.
  * This provides a safety net against accidental data deletion or corruption
-
+ *
  * 2. Atomic Save Operations:
  * To prevent data loss in case of an unexpected application crash or shutdown during a writing operation,
  * this service performs an atomic save. All new data is first written to a temporary file
@@ -38,8 +38,6 @@ import java.util.stream.Stream;
  * atomically moved to replace the main vault file. This ensures that the
  * primary vault file is never left in a corrupted, partially-written state.
  */
-
-
 public class StorageService {
 
     private static final Path APP_DIR = Paths.get(System.getProperty("user.home"), ".securex");
@@ -59,10 +57,7 @@ public class StorageService {
     }
 
     public void save(List<PasswordEntry> entries) throws Exception {
-        // Step 1: Backup the existing vault before doing anything else.
         backupExistingVault();
-
-        // Step 2: Proceed with the original atomic save operation.
         String json = gson.toJson(entries);
         String encryptedData = cryptoService.encrypt(json);
 
@@ -72,17 +67,10 @@ public class StorageService {
 
     private void backupExistingVault() throws IOException {
         if (Files.exists(VAULT_FILE)) {
-            // Ensure the backups directory exists.
             Files.createDirectories(BACKUPS_DIR);
-
-            // Create a timestamped name for the backup file.
             String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
             Path backupFile = BACKUPS_DIR.resolve("vault-" + timestamp + ".dat");
-
-            // Move the current vault to the backup directory.
             Files.move(VAULT_FILE, backupFile, StandardCopyOption.ATOMIC_MOVE);
-
-            // Prune old backups to keep the directory clean.
             pruneOldBackups();
         }
     }
@@ -90,7 +78,7 @@ public class StorageService {
     private void pruneOldBackups() throws IOException {
         try (Stream<Path> stream = Files.list(BACKUPS_DIR)) {
             List<Path> backups = stream
-                    .filter(Files::isRegularFile)
+                    .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().startsWith("vault-"))
                     .sorted(Comparator.comparing((Path p) -> p.getFileName().toString()).reversed())
                     .collect(Collectors.toList());
 
@@ -115,10 +103,35 @@ public class StorageService {
         }
 
         String json = cryptoService.decrypt(encryptedData);
-
         Type type = new TypeToken<ArrayList<PasswordEntry>>() {}.getType();
         List<PasswordEntry> entries = gson.fromJson(json, type);
 
         return entries != null ? entries : new ArrayList<>();
+    }
+
+    public List<Path> getBackupFiles() throws IOException {
+        if (!Files.exists(BACKUPS_DIR)) {
+            return new ArrayList<>();
+        }
+        try (Stream<Path> stream = Files.list(BACKUPS_DIR)) {
+            return stream
+                    .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().startsWith("vault-"))
+                    .sorted(Comparator.comparing((Path p) -> p.getFileName().toString()).reversed())
+                    .collect(Collectors.toList());
+        }
+    }
+
+    public void restoreFromBackup(Path backupFile) throws IOException {
+        // First, create a final backup of the current vault before we overwrite it.
+        if (Files.exists(VAULT_FILE)) {
+            String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
+            Path finalBackup = BACKUPS_DIR.resolve("vault-before-restore-" + timestamp + ".dat");
+            Files.copy(VAULT_FILE, finalBackup);
+        }
+
+        // Copy the selected backup to the main vault file location.
+        Files.copy(backupFile, VAULT_FILE, StandardCopyOption.REPLACE_EXISTING);
+        // After restoring, prune the backups again to clean up any "before-restore" files that are too old.
+        pruneOldBackups();
     }
 }
