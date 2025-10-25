@@ -13,7 +13,7 @@ import com.sun.jna.win32.W32APIOptions;
  * to prevent the copied content from being stored in the clipboard history.
  * For non-Windows operating systems, it falls back to the standard JavaFX clipboard.
  * This difference in operation based on OS is because Windows does not
- * allow an app to programmatically clear the clipboard.
+ * allow an app to programmatically clear the clipboard. cz
  */
 public class ClipboardService {
 

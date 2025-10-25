@@ -37,11 +37,17 @@ public class LoginController {
             }
 
             if (authManager.masterPasswordExists()) {
-                if (authManager.verifyPassword(pwd)) {
-                    // We need the salt to initialize the CryptoService
+                // IMPORTANT: verify with a COPY because verifyPassword (and HashUtil.verifyPassword) zero the array
+                char[] pwdForVerify = Arrays.copyOf(pwd, pwd.length);
+                boolean ok = authManager.verifyPassword(pwdForVerify);
+                Arrays.fill(pwdForVerify, '\0'); // clear the verification copy promptly
+
+                if (ok) {
+                    // We need the salt to initialize the CryptoService for this session
                     byte[] salt = authManager.getSalt();
                     if (salt != null) {
-                        // Pass the master password and salt to the dashboard to unlock the vault.
+                        // Pass the ORIGINAL password array to construct the session key.
+                        // CryptoService will zero it; we also zero it after switching scenes.
                         switchToDashboard(pwd, salt);
                     } else {
                         showAlert(Alert.AlertType.ERROR, "Could not retrieve salt for decryption.");
@@ -57,6 +63,7 @@ public class LoginController {
                     showAlert(Alert.AlertType.ERROR, "Could not save master password. Check file permissions.");
                 }
             }
+            // Clear the original password after it's handed off
             Arrays.fill(pwd, '\0');
         });
 

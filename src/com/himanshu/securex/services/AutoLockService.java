@@ -12,39 +12,83 @@ import javafx.util.Duration;
  */
 public class AutoLockService {
 
-    private final Timeline timeline;
+    private Timeline timeline;
     private final Runnable onTimeout;
+    private int timeoutMinutes;
+    private boolean isEnabled;
 
     /**
      * Initializes the auto-lock service.
-     * @param timeOutMinutes The number of minutes of inactivity before locking.
+     * @param timeoutMinutes The number of minutes of inactivity before locking, or -1 to disable.
      * @param onTimeout      The action to perform when the timer expires.
      */
-    public AutoLockService(long timeOutMinutes, Runnable onTimeout) {
+    public AutoLockService(int timeoutMinutes, Runnable onTimeout) {
         this.onTimeout = onTimeout;
-        this.timeline = new Timeline(new KeyFrame(Duration.minutes(timeOutMinutes), e -> lock()));
-        this.timeline.setCycleCount(1); // Run only once
+        updateTimeout(timeoutMinutes);
     }
 
     /**
-     * Starts the inactivity timer.
+     * Updates the timeout period and recreates the timeline if necessary.
+     * @param timeoutMinutes The new timeout in minutes, or -1 to disable auto-lock.
+     */
+    public void updateTimeout(int timeoutMinutes) {
+        this.timeoutMinutes = timeoutMinutes;
+        this.isEnabled = timeoutMinutes > 0;
+
+        // Stop existing timeline
+        if (timeline != null) {
+            timeline.stop();
+        }
+
+        // Create new timeline only if auto-lock is enabled
+        if (isEnabled) {
+            this.timeline = new Timeline(new KeyFrame(Duration.minutes(timeoutMinutes), e -> lock()));
+            this.timeline.setCycleCount(1); // Run only once
+        } else {
+            this.timeline = null;
+        }
+    }
+
+    /**
+     * Starts the inactivity timer if auto-lock is enabled.
      */
     public void start() {
-        timeline.playFromStart();
+        if (isEnabled && timeline != null) {
+            timeline.playFromStart();
+        }
     }
 
     /**
-     * Resets the inactivity timer. This should be called on any user interaction.
+     * Resets the inactivity timer if auto-lock is enabled.
+     * This should be called on any user interaction.
      */
     public void reset() {
-        timeline.playFromStart();
+        if (isEnabled && timeline != null) {
+            timeline.playFromStart();
+        }
     }
 
     /**
      * Stops the timer.
      */
     public void stop() {
-        timeline.stop();
+        if (timeline != null) {
+            timeline.stop();
+        }
+    }
+
+    /**
+     * Returns whether auto-lock is currently enabled.
+     */
+    public boolean isEnabled() {
+        return isEnabled;
+    }
+
+    /**
+     * Returns the current timeout in minutes.
+     */
+    public int getTimeoutMinutes() {
+        return timeoutMinutes;
     }
 
     private void lock() {

@@ -7,6 +7,7 @@ import com.himanshu.securex.services.CryptoService;
 import com.himanshu.securex.services.StorageService;
 import com.himanshu.securex.util.PasswordGenerator;
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -19,9 +20,7 @@ import javafx.util.Duration;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class DashboardController {
@@ -42,12 +41,13 @@ public class DashboardController {
     private StackPane passwordContainer;
     private Label feedbackLabel;
 
-    private GridPane detailsPane;
+    private BorderPane detailsPane;
     private Label emptyStateLabel;
 
     public DashboardController(Stage stage, char[] masterPassword, byte[] salt) {
         this.stage = stage;
-        CryptoService cryptoService = new CryptoService(masterPassword, salt);
+        // Pass a copy; CryptoService zeroes input
+        CryptoService cryptoService = new CryptoService(Arrays.copyOf(masterPassword, masterPassword.length), salt);
         this.storageService = new StorageService(cryptoService);
         Arrays.fill(masterPassword, '\0');
 
@@ -64,11 +64,11 @@ public class DashboardController {
         loadEntries();
     }
 
-    // This constructor is for testing purposes
+    // For testing using JUnit
     DashboardController(Stage stage, StorageService storageService) {
         this.stage = stage;
         this.storageService = storageService;
-        this.autoLockService = new AutoLockService(5, this::performLogout); // Dummy for testing
+        this.autoLockService = new AutoLockService(5, this::performLogout);
         this.view = new BorderPane();
         setupUI();
     }
@@ -86,14 +86,22 @@ public class DashboardController {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        Button settingsBtn = new Button("Settings");
+        settingsBtn.setOnAction(e -> openSettings());
+
         Button restoreBtn = new Button("Restore from Backup");
         restoreBtn.setOnAction(e -> handleRestoreBackup());
 
         Button logoutBtn = new Button("Logout");
         logoutBtn.setOnAction(e -> performLogout());
 
-        topBar.getChildren().addAll(title, spacer, restoreBtn, logoutBtn);
+        topBar.getChildren().addAll(title, spacer, settingsBtn, restoreBtn, logoutBtn);
         return topBar;
+    }
+
+    private void openSettings() {
+        SettingsController settings = new SettingsController(stage, storageService, this);
+        settings.show();
     }
 
     private void handleRestoreBackup() {
@@ -123,7 +131,7 @@ public class DashboardController {
                     if (selectedBackupFile != null) {
                         storageService.restoreFromBackup(selectedBackupFile);
                         showAlert(Alert.AlertType.INFORMATION, "Vault restored successfully! Reloading data.");
-                        loadEntries(); // Reload the dashboard with the new data
+                        loadEntries();
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -151,13 +159,18 @@ public class DashboardController {
         detailsPane = createDetailsPane();
         emptyStateLabel = new Label("Select an entry to view details, or click 'New Entry' to begin.");
         emptyStateLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: grey;");
-        StackPane rightPane = new StackPane(emptyStateLabel, detailsPane);
 
+        ScrollPane detailsScroll = new ScrollPane(detailsPane);
+        detailsScroll.setFitToWidth(true);
+        detailsScroll.setFitToHeight(true);
+        detailsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        detailsScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        StackPane rightStack = new StackPane(emptyStateLabel, detailsScroll);
         detailsPane.setVisible(false);
         emptyStateLabel.setVisible(true);
 
         entryListView.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
-            // Clear the fields before populating them with new data to minimize memory exposure.
             if (oldSelection != null) {
                 clearDetailsFields();
             }
@@ -174,15 +187,16 @@ public class DashboardController {
             }
         });
 
-        SplitPane splitPane = new SplitPane();
-        splitPane.getItems().addAll(leftPane, rightPane);
-        splitPane.setDividerPositions(0.3);
+        SplitPane splitPane = new SplitPane(leftPane, rightStack);
+        splitPane.setDividerPositions(0.30);
         return splitPane;
     }
 
-    private GridPane createDetailsPane() {
+    private BorderPane createDetailsPane() {
+        BorderPane root = new BorderPane();
+        root.setPadding(new Insets(10));
+
         GridPane grid = new GridPane();
-        grid.setPadding(new Insets(10));
         grid.setHgap(10);
         grid.setVgap(15);
 
@@ -213,6 +227,12 @@ public class DashboardController {
         feedbackLabel.setStyle("-fx-text-fill: green;");
         grid.add(feedbackLabel, 1, 3);
 
+        ColumnConstraints c0 = new ColumnConstraints();
+        c0.setPercentWidth(25);
+        ColumnConstraints c1 = new ColumnConstraints();
+        c1.setPercentWidth(75);
+        grid.getColumnConstraints().addAll(c0, c1);
+
         Button saveButton = new Button("Save");
         saveButton.setOnAction(e -> saveCurrentEntry());
         Button deleteButton = new Button("Delete");
@@ -223,8 +243,11 @@ public class DashboardController {
 
         HBox buttonBar = new HBox(10, deleteButton, saveButton);
         buttonBar.setAlignment(Pos.CENTER_RIGHT);
-        grid.add(buttonBar, 1, 4);
-        return grid;
+        buttonBar.setPadding(new Insets(10, 0, 0, 0));
+
+        root.setCenter(grid);
+        root.setBottom(buttonBar);
+        return root;
     }
 
     private void createPasswordToggleField() {
@@ -262,7 +285,7 @@ public class DashboardController {
         } else {
             passwordField.setText(new String(generatedPassword));
         }
-        Arrays.fill(generatedPassword, '\0'); // Clear the generated password from memory
+        Arrays.fill(generatedPassword, '\0');
     }
 
     private void copyToClipboard(String text, String fieldName) {
@@ -321,7 +344,7 @@ public class DashboardController {
             entryListView.getSelectionModel().select(newEntry);
         }
 
-        Arrays.fill(password, '\0'); // Clear password from memory after use
+        Arrays.fill(password, '\0');
         saveEntries();
     }
 
@@ -361,7 +384,6 @@ public class DashboardController {
 
     private void performLogout() {
         autoLockService.stop();
-        // Securely clear all password entries from memory before logging out
         for (PasswordEntry entry : passwordEntries) {
             entry.clearPassword();
         }
@@ -376,9 +398,34 @@ public class DashboardController {
     }
 
     private void showAlert(Alert.AlertType type, String msg) {
-        Alert alert = new Alert(type, msg, ButtonType.OK);
-        alert.setHeaderText(null);
-        alert.showAndWait();
+        Platform.runLater(() -> {
+            Alert alert = new Alert(type, msg, ButtonType.OK);
+            alert.setHeaderText(null);
+            alert.initOwner(stage);
+            alert.show();
+        });
+    }
+
+    // Provide a safe snapshot of plaintext entries (deep copy)
+    public List<PasswordEntry> snapshotEntries() {
+        List<PasswordEntry> copy = new ArrayList<>(passwordEntries.size());
+        for (PasswordEntry e : passwordEntries) {
+            char[] pwd = e.getPassword() != null ? Arrays.copyOf(e.getPassword(), e.getPassword().length) : new char[0];
+            copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd));
+            Arrays.fill(pwd, '\0');
+        }
+        return copy;
+    }
+
+    public void onPasswordChanged(boolean success) {
+        if (success) {
+            showAlert(Alert.AlertType.INFORMATION, "Master password changed successfully. You will be logged out.");
+            PauseTransition pause = new PauseTransition(Duration.seconds(0.1));
+            pause.setOnFinished(e -> performLogout());
+            pause.play();
+        } else {
+            showAlert(Alert.AlertType.ERROR, "Password could not be changed successfully.");
+        }
     }
 
     public BorderPane getView() {
