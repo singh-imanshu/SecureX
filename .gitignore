@@ -51,3 +51,5 @@ ehthumbs.db
 # Linux
 *~
 *.swp
+build.sh
+run.sh
