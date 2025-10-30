@@ -38,16 +38,15 @@ public class AutoLockService {
         // Stop existing timeline
         if (timeline != null) {
             timeline.stop();
+            timeline = null;
         }
 
         // Create new timeline only if auto-lock is enabled
         if (isEnabled) {
             this.timeline = new Timeline(new KeyFrame(Duration.minutes(timeoutMinutes), e -> lock()));
             this.timeline.setCycleCount(1); // Run only once
-        } else {
-            this.timeline = null;
         }
-    }
+	 }
 
     /**
      * Starts the inactivity timer if auto-lock is enabled.
