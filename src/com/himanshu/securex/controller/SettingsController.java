@@ -7,14 +7,16 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.*;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.util.Arrays;
 
 public class SettingsController {
-
     private final Stage owner;
     private final StorageService storageService;
     private final DashboardController dashboardController;
@@ -92,6 +94,21 @@ public class SettingsController {
                 if (!Arrays.equals(newPwd, confirmPwd)) {
                     showAlert(Alert.AlertType.ERROR, "New password and confirmation do not match.");
                     return;
+                }
+
+                // Warn the user that all backups will be deleted if they proceed
+                Alert confirm = new Alert(Alert.AlertType.WARNING);
+                confirm.setTitle("Confirm Password Change");
+                confirm.setHeaderText("Backups will be deleted");
+                confirm.setContentText("Changing your master password will permanently delete ALL existing backups.\nThis action cannot be undone.\n\nDo you want to continue?");
+                ButtonType proceed = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
+                ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                confirm.getButtonTypes().setAll(cancel, proceed);
+                confirm.initOwner(owner);
+
+                var result = confirm.showAndWait();
+                if (result.isEmpty() || result.get() != proceed) {
+                    return; // user canceled
                 }
 
                 // Use in-memory entries to avoid decrypting from disk

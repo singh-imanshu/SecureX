@@ -81,6 +81,7 @@ public class AuthManager {
      * - Otherwise, load current vault with the old key; if that fails, try to load from backups.
      * - Save entries with new key (atomically replaces the vault and backs up old one).
      * - Only after that succeeds, atomically update master.dat.
+     * - Finally, delete all backups as per policy when changing the master password.
      */
     public boolean changeMasterPassword(char[] oldPassword,
                                         char[] newPassword,
@@ -129,6 +130,10 @@ public class AuthManager {
 
             // 5) Only now swap master.dat to the new hash atomically
             writeMasterFileAtomic(newHashed);
+
+            // 6) Delete all backups after a successful password change
+            deleteAllBackupsQuietly();
+
             return true;
 
         } catch (Exception e) {
@@ -192,6 +197,28 @@ public class AuthManager {
             Files.move(temp, MASTER_FILE_PATH, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException atomicEx) {
             Files.move(temp, MASTER_FILE_PATH, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * Deletes the entire backups directory and its files.
+     */
+    private void deleteAllBackupsQuietly() {
+        Path backupsDir = APP_DIR.resolve("backups");
+        try {
+            if (Files.exists(backupsDir)) {
+                try (java.util.stream.Stream<Path> s = Files.list(backupsDir)) {
+                    for (Path p : s.collect(Collectors.toList())) {
+                        try {
+                            Files.deleteIfExists(p);
+                        } catch (IOException ignored) {}
+                    }
+                }
+                try {
+                    Files.deleteIfExists(backupsDir);
+                } catch (IOException ignored) {}
+            }
+        } catch (IOException ignored) {
         }
     }
 }
