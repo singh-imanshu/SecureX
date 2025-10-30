@@ -23,6 +23,9 @@ vault.dat
 *.ipr
 out/
 
+### Build Artifacts ###
+.META-INF/
+
 ### Eclipse ###
 .classpath
 .project
