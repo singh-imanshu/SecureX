@@ -99,6 +99,7 @@ public class SettingsController {
                 // Warn the user that all backups will be deleted if they proceed
                 Alert confirm = new Alert(Alert.AlertType.WARNING);
                 confirm.setTitle("Confirm Password Change");
+
                 confirm.setHeaderText("Backups will be deleted");
                 confirm.setContentText("Changing your master password will permanently delete ALL existing backups.\nThis action cannot be undone.\n\nDo you want to continue?");
                 ButtonType proceed = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
