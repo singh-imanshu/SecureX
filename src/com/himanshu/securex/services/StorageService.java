@@ -60,7 +60,7 @@ public class StorageService {
         Files.writeString(TEMP_FILE, encryptedData);
         try {
             Files.move(TEMP_FILE, VAULT_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
+        } catch (AtomicMoveNotSupportedException e) {
             Files.move(TEMP_FILE, VAULT_FILE, StandardCopyOption.REPLACE_EXISTING);
         }
     }
@@ -72,7 +72,7 @@ public class StorageService {
             Path backupFile = BACKUPS_DIR.resolve("vault-" + timestamp + ".dat");
             try {
                 Files.move(VAULT_FILE, backupFile, StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
+            } catch (AtomicMoveNotSupportedException e) {
                 Files.move(VAULT_FILE, backupFile, StandardCopyOption.REPLACE_EXISTING);
             }
             pruneOldBackups();
@@ -142,7 +142,7 @@ public class StorageService {
             Files.writeString(TEMP_FILE, newEncrypted, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             try {
                 Files.move(TEMP_FILE, VAULT_FILE, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException atomicEx) {
+            } catch (AtomicMoveNotSupportedException atomicEx) {
                 Files.move(TEMP_FILE, VAULT_FILE, StandardCopyOption.REPLACE_EXISTING);
             }
 
