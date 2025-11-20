@@ -81,7 +81,7 @@ public class AuthManager {
      * - Otherwise, load current vault with the old key; if that fails, try to load from backups.
      * - Save entries with new key (atomically replaces the vault and backs up old one).
      * - Only after that succeeds, atomically update master.dat.
-     * - Finally, delete all backups as per policy when changing the master password.
+     * - Re-encrypt existing backups with the new key instead of deleting them.
      */
     public boolean changeMasterPassword(char[] oldPassword,
                                         char[] newPassword,
@@ -131,8 +131,10 @@ public class AuthManager {
             // 5) Only now swap master.dat to the new hash atomically
             writeMasterFileAtomic(newHashed);
 
-            // 6) Delete all backups after a successful password change
-            deleteAllBackupsQuietly();
+            // 6) FIX: Re-encrypt old backups so they remain accessible.
+            // Previously, this method deleted them (deleteAllBackupsQuietly).
+            // This will also re-encrypt 'vault-before-restore.dat' if it exists.
+            currentStorage.reencryptAllBackups(oldCrypto, newCrypto);
 
             return true;
 
@@ -200,9 +202,7 @@ public class AuthManager {
         }
     }
 
-    /**
-     * Deletes the entire backups directory and its files.
-     */
+    // Method kept for legacy reference or explicit wipe features, but unused in normal flow.
     private void deleteAllBackupsQuietly() {
         Path backupsDir = APP_DIR.resolve("backups");
         try {

@@ -1,10 +1,7 @@
 package com.himanshu.securex.controller;
 
 import com.himanshu.securex.model.PasswordEntry;
-import com.himanshu.securex.services.AutoLockService;
-import com.himanshu.securex.services.ClipboardService;
-import com.himanshu.securex.services.CryptoService;
-import com.himanshu.securex.services.StorageService;
+import com.himanshu.securex.services.*;
 import com.himanshu.securex.util.PasswordGenerator;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
@@ -29,6 +26,7 @@ public class DashboardController {
     private final Stage stage;
     private final StorageService storageService;
     private final AutoLockService autoLockService;
+    private final SettingsService settingsService; // NEW
 
     private ObservableList<PasswordEntry> passwordEntries;
     private PasswordEntry currentlySelectedEntry = null;
@@ -46,12 +44,17 @@ public class DashboardController {
 
     public DashboardController(Stage stage, char[] masterPassword, byte[] salt) {
         this.stage = stage;
-        // Pass a copy; CryptoService zeroes input
+
+        // Initialize Settings Service
+        this.settingsService = new SettingsService();
+
         CryptoService cryptoService = new CryptoService(Arrays.copyOf(masterPassword, masterPassword.length), salt);
         this.storageService = new StorageService(cryptoService);
         Arrays.fill(masterPassword, '\0');
 
-        this.autoLockService = new AutoLockService(5, this::performLogout);
+        // Initialize AutoLock with User Preference
+        int savedTimeout = settingsService.getAutoLockTimeout();
+        this.autoLockService = new AutoLockService(savedTimeout, this::performLogout);
         this.autoLockService.start();
 
         this.view = new BorderPane();
@@ -68,9 +71,16 @@ public class DashboardController {
     DashboardController(Stage stage, StorageService storageService) {
         this.stage = stage;
         this.storageService = storageService;
+        this.settingsService = new SettingsService();
         this.autoLockService = new AutoLockService(5, this::performLogout);
         this.view = new BorderPane();
         setupUI();
+    }
+
+    // NEW: Method to update timeout at runtime
+    public void updateAutoLockTimeout(int minutes) {
+        autoLockService.updateTimeout(minutes);
+        autoLockService.reset(); // Apply immediately
     }
 
     private void setupUI() {
@@ -100,9 +110,10 @@ public class DashboardController {
     }
 
     private void openSettings() {
-        SettingsController settings = new SettingsController(stage, storageService, this);
+        SettingsController settings = new SettingsController(stage, storageService, this, settingsService);
         settings.show();
     }
+
 
     private void handleRestoreBackup() {
         try {
@@ -112,27 +123,64 @@ public class DashboardController {
                 return;
             }
 
-            List<String> backupChoices = backupFiles.stream()
-                    .map(p -> p.getFileName().toString())
-                    .collect(Collectors.toList());
-
-            ChoiceDialog<String> dialog = new ChoiceDialog<>(backupChoices.get(0), backupChoices);
+            // Create a custom Dialog to allow rich tooltips (popups)
+            Dialog<Path> dialog = new Dialog<>();
             dialog.setTitle("Restore Vault");
             dialog.setHeaderText("Choose a backup to restore.");
-            dialog.setContentText("Warning: This will overwrite your current vault.");
+            dialog.setContentText("Hover over a file to see details.");
 
-            Optional<String> result = dialog.showAndWait();
-            result.ifPresent(selectedBackupName -> {
-                try {
-                    Path selectedBackupFile = backupFiles.stream()
-                            .filter(p -> p.getFileName().toString().equals(selectedBackupName))
-                            .findFirst()
-                            .orElse(null);
-                    if (selectedBackupFile != null) {
-                        storageService.restoreFromBackup(selectedBackupFile);
-                        showAlert(Alert.AlertType.INFORMATION, "Vault restored successfully! Reloading data.");
-                        loadEntries();
+            // Use the current window as the owner
+            dialog.initOwner(stage);
+
+            // Create a ListView for the backups
+            ListView<Path> list = new ListView<>();
+            list.setItems(FXCollections.observableArrayList(backupFiles));
+            list.setPrefHeight(200);
+
+            // Custom Cell Factory to add Tooltips (Popups)
+            list.setCellFactory(param -> new ListCell<>() {
+                @Override
+                protected void updateItem(Path item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setText(null);
+                        setTooltip(null);
+                    } else {
+                        // Display the filename
+                        setText(item.getFileName().toString());
+
+                        // Fetch count using our fast metadata reader
+                        int count = storageService.getEntryCountFast(item);
+                        String msg = (count >= 0)
+                                ? "This backup file has " + count + " passwords."
+                                : "Could not read password count.";
+
+                        // Create the "little popup"
+                        Tooltip tooltip = new Tooltip(msg);
+                        tooltip.setStyle("-fx-font-size: 14px;");
+                        tooltip.setShowDelay(Duration.millis(300)); // Show quickly
+                        setTooltip(tooltip);
                     }
+                }
+            });
+
+            dialog.getDialogPane().setContent(list);
+            dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+            // Convert the result: Return selected path if OK is clicked
+            dialog.setResultConverter(btn -> {
+                if (btn == ButtonType.OK) {
+                    return list.getSelectionModel().getSelectedItem();
+                }
+                return null;
+            });
+
+            Optional<Path> result = dialog.showAndWait();
+            result.ifPresent(selectedFile -> {
+                try {
+                    storageService.restoreFromBackup(selectedFile);
+                    showAlert(Alert.AlertType.INFORMATION, "Vault restored successfully! Reloading data.");
+                    loadEntries();
                 } catch (IOException e) {
                     e.printStackTrace();
                     showAlert(Alert.AlertType.ERROR, "Failed to restore backup.");
@@ -394,6 +442,7 @@ public class DashboardController {
         stage.setTitle("SecureX - Login");
         stage.setResizable(false);
         stage.setScene(loginScene);
+        stage.sizeToScene();
         stage.centerOnScreen();
     }
 
@@ -406,7 +455,6 @@ public class DashboardController {
         });
     }
 
-    // Provide a safe snapshot of plaintext entries (deep copy)
     public List<PasswordEntry> snapshotEntries() {
         List<PasswordEntry> copy = new ArrayList<>(passwordEntries.size());
         for (PasswordEntry e : passwordEntries) {

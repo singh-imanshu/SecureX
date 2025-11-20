@@ -18,10 +18,11 @@ public class SettingsService {
     private static final String AUTO_LOCK_TIMEOUT_KEY = "autolock.timeout.minutes";
     private static final int DEFAULT_AUTO_LOCK_TIMEOUT = 5; // 5 minutes default
 
-    private Properties properties;
+    private final Properties properties;
 
     public SettingsService() {
         ensureAppDirectoryExists();
+        this.properties = new Properties();
         loadSettings();
     }
 
@@ -30,20 +31,18 @@ public class SettingsService {
             try {
                 Files.createDirectories(APP_DIR);
             } catch (IOException e) {
-                throw new RuntimeException("Could not create application data directory.", e);
+                // Non-fatal, but settings might not save
+                e.printStackTrace();
             }
         }
     }
 
     private void loadSettings() {
-        properties = new Properties();
-
         if (Files.exists(SETTINGS_FILE)) {
             try {
                 properties.load(Files.newInputStream(SETTINGS_FILE));
             } catch (IOException e) {
                 System.err.println("Warning: Could not load settings file. Using defaults.");
-                // Continue with empty properties (defaults will be used)
             }
         }
     }
@@ -62,7 +61,8 @@ public class SettingsService {
      * @return The timeout in minutes, or -1 if auto-lock is disabled.
      */
     public int getAutoLockTimeout() {
-        String value = properties.getProperty(AUTO_LOCK_TIMEOUT_KEY, String.valueOf(DEFAULT_AUTO_LOCK_TIMEOUT));
+        String value = properties.getProperty(AUTO_LOCK_TIMEOUT_KEY);
+        if (value == null) return DEFAULT_AUTO_LOCK_TIMEOUT;
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException e) {
