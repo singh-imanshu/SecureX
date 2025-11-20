@@ -17,6 +17,28 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Manages the persistence of the encrypted password vault to the user's local filesystem.
+ *
+ * This service is responsible for both loading the vault from disk and saving it securely.
+ * It incorporates robust data safety features:
+ *
+ * 1. Automatic Encrypted Backups:
+ * Before any save operation, the existing vault file is copied to a dedicated backups
+ * directory with a timestamp. Metadata (entry count) is embedded in the filename
+ * for fast inspection.
+ *
+ * 2. Atomic Save Operations:
+ * To prevent data loss, all new data is first written to a temporary file.
+ * Only after the writing operation is fully successful is the temporary file
+ * atomically moved to replace the main vault file.
+ *
+ * 3. Rotating Restore Points:
+ * When restoring a backup, the current state is saved to a rotating set of
+ * "vault-before-restore" files, ensuring data is never lost even during
+ * multiple panicked restore attempts.
+ */
+
 public class StorageService {
     private static final Path APP_DIR = Paths.get(System.getProperty("user.home"), ".securex");
     private static final Path VAULT_FILE = APP_DIR.resolve("vault.dat");
