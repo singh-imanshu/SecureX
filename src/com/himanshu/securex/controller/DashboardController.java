@@ -58,6 +58,9 @@ public class DashboardController {
         this.autoLockService.start();
 
         this.view = new BorderPane();
+
+        this.view.setStyle("-fx-focus-color: transparent; -fx-faint-focus-color: transparent;");
+
         this.view.setPadding(new Insets(10));
 
         this.view.setOnMouseMoved(e -> autoLockService.reset());
@@ -96,13 +99,18 @@ public class DashboardController {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        String blueGlowStyle = "-fx-focus-color: #0096C9; -fx-faint-focus-color: #0096C945; -fx-font-weight: bold;";
+
         Button settingsBtn = new Button("Settings");
+        settingsBtn.setStyle(blueGlowStyle);
         settingsBtn.setOnAction(e -> openSettings());
 
         Button restoreBtn = new Button("Restore from Backup");
+        restoreBtn.setStyle(blueGlowStyle);
         restoreBtn.setOnAction(e -> handleRestoreBackup());
 
         Button logoutBtn = new Button("Logout");
+        logoutBtn.setStyle(blueGlowStyle);
         logoutBtn.setOnAction(e -> performLogout());
 
         topBar.getChildren().addAll(title, spacer, settingsBtn, restoreBtn, logoutBtn);
@@ -200,6 +208,9 @@ public class DashboardController {
         VBox.setVgrow(entryListView, Priority.ALWAYS);
 
         Button newButton = new Button("New Entry");
+        String blueGlowStyle = "-fx-focus-color: #0096C9; -fx-faint-focus-color: #0096C945; -fx-font-weight: bold;";
+        newButton.setStyle(blueGlowStyle);
+
         newButton.setMaxWidth(Double.MAX_VALUE);
         newButton.setOnAction(e -> handleNewEntryClick());
         leftPane.getChildren().addAll(entryListView, newButton);
@@ -250,6 +261,11 @@ public class DashboardController {
 
         accountField = new TextField();
         usernameField = new TextField();
+
+        String defaultFocus = "-fx-focus-color: #0096C9; -fx-faint-focus-color: #0096C945;";
+        accountField.setStyle(defaultFocus);
+        usernameField.setStyle(defaultFocus);
+
         createPasswordToggleField();
 
         Button copyUserButton = new Button("Copy");
@@ -301,6 +317,10 @@ public class DashboardController {
     private void createPasswordToggleField() {
         passwordField = new PasswordField();
         plainPasswordField = new TextField();
+
+        String defaultFocus = "-fx-focus-color: #0096C9; -fx-faint-focus-color: #0096C945;";
+        passwordField.setStyle(defaultFocus);
+        plainPasswordField.setStyle(defaultFocus);
 
         plainPasswordField.managedProperty().bind(passwordField.managedProperty());
         plainPasswordField.visibleProperty().bind(passwordField.visibleProperty().not());
