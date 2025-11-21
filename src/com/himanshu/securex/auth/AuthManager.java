@@ -70,30 +70,22 @@ public class AuthManager {
         }
     }
 
-    // Backwards-compatible entry point
+
+    //we overload changeMasterPassword()
+
     public boolean changeMasterPassword(char[] oldPassword, char[] newPassword, StorageService currentStorage) {
         return changeMasterPassword(oldPassword, newPassword, currentStorage, null);
     }
 
-    /**
-     * Atomic password change:
-     * - Use provided plaintext entries if available (preferred).
-     * - Otherwise, load current vault with the old key; if that fails, try to load from backups.
-     * - Save entries with new key (atomically replaces the vault and backs up old one).
-     * - Only after that succeeds, atomically update master.dat.
-     * - Re-encrypt existing backups with the new key instead of deleting them.
-     */
     public boolean changeMasterPassword(char[] oldPassword,
                                         char[] newPassword,
                                         StorageService currentStorage,
                                         List<PasswordEntry> currentPlainEntries) {
         try {
-            // 1) Verify old password first
             if (!verifyPassword(Arrays.copyOf(oldPassword, oldPassword.length))) {
                 return false;
             }
 
-            // 2) Derive old and new crypto keys (pass copies so CryptoService can zero inputs safely)
             byte[] oldSalt = getSalt();
             if (oldSalt == null) return false;
 
@@ -103,37 +95,31 @@ public class AuthManager {
             byte[] newSalt = HashUtil.extractSaltFromHash(newHashed);
             CryptoService newCrypto = new CryptoService(Arrays.copyOf(newPassword, newPassword.length), newSalt);
 
-            // 3) Gather plaintext entries safely
             List<PasswordEntry> entries;
             if (currentPlainEntries != null) {
                 entries = deepCopyEntries(currentPlainEntries);
             } else {
-                // Try loading current vault with the old key
                 try {
                     StorageService oldStorage = new StorageService(oldCrypto);
                     entries = oldStorage.load();
                 } catch (Exception loadEx) {
-                    // Fallback: try newest backups and attempt to decrypt with old key
-                    try {
-                        entries = tryLoadFromBackups(currentStorage, oldCrypto);
-                    } catch (Exception backupEx) {
-                        loadEx.printStackTrace();
-                        backupEx.printStackTrace();
-                        return false;
-                    }
+                    entries = tryLoadFromBackups(currentStorage, oldCrypto);
                 }
             }
 
-            // 4) Save entries using the new key (atomically replaces vault and backs up existing one)
-            StorageService newStorage = new StorageService(newCrypto);
-            newStorage.save(entries);
+            // 1. Explicitly backup the CURRENT vault using the OLD key (currentStorage).
+            if (currentStorage != null) {
+                currentStorage.backupCurrentVault();
+            }
 
-            // 5) Only now swap master.dat to the new hash atomically
+            // 2. Save entries using the NEW key service WITHOUT trying to backup again.
+            StorageService newStorage = new StorageService(newCrypto);
+            newStorage.saveWithoutBackup(entries);
+
+            // 5) Swap master.dat
             writeMasterFileAtomic(newHashed);
 
-            // 6) FIX: Re-encrypt old backups so they remain accessible.
-            // Previously, this method deleted them (deleteAllBackupsQuietly).
-            // This will also re-encrypt 'vault-before-restore.dat' if it exists.
+            // 6) Re-encrypt old backups so they are accessible with the new password
             currentStorage.reencryptAllBackups(oldCrypto, newCrypto);
 
             return true;
@@ -152,7 +138,7 @@ public class AuthManager {
         for (PasswordEntry e : source) {
             char[] pwd = e.getPassword() != null ? Arrays.copyOf(e.getPassword(), e.getPassword().length) : new char[0];
             copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd));
-            Arrays.fill(pwd, '\0'); // new entry will copy internally; clear our temp
+            Arrays.fill(pwd, '\0');
         }
         return copy;
     }
@@ -163,7 +149,6 @@ public class AuthManager {
             throw new IOException("No backups found to attempt decryption.");
         }
 
-        // Newest first based on filename (timestamp included)
         List<Path> sorted = backups.stream()
                 .filter(Files::isRegularFile)
                 .sorted((a, b) -> b.getFileName().toString().compareTo(a.getFileName().toString()))
@@ -177,9 +162,7 @@ public class AuthManager {
                 java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<ArrayList<PasswordEntry>>() {}.getType();
                 List<PasswordEntry> entries = new com.google.gson.Gson().fromJson(json, type);
                 if (entries != null) return entries;
-            } catch (Exception ignore) {
-                // try next backup
-            }
+            } catch (Exception ignore) {}
         }
         throw new IOException("Failed to decrypt any backup with the current key.");
     }
@@ -199,26 +182,6 @@ public class AuthManager {
             Files.move(temp, MASTER_FILE_PATH, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException atomicEx) {
             Files.move(temp, MASTER_FILE_PATH, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
-
-    // Method kept for legacy reference or explicit wipe features, but unused in normal flow.
-    private void deleteAllBackupsQuietly() {
-        Path backupsDir = APP_DIR.resolve("backups");
-        try {
-            if (Files.exists(backupsDir)) {
-                try (java.util.stream.Stream<Path> s = Files.list(backupsDir)) {
-                    for (Path p : s.collect(Collectors.toList())) {
-                        try {
-                            Files.deleteIfExists(p);
-                        } catch (IOException ignored) {}
-                    }
-                }
-                try {
-                    Files.deleteIfExists(backupsDir);
-                } catch (IOException ignored) {}
-            }
-        } catch (IOException ignored) {
         }
     }
 }

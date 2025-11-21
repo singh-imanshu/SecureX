@@ -38,7 +38,6 @@ import java.util.stream.Stream;
  * "vault-before-restore" files, ensuring data is never lost even during
  * multiple panicked restore attempts.
  */
-
 public class StorageService {
     private static final Path APP_DIR = Paths.get(System.getProperty("user.home"), ".securex");
     private static final Path VAULT_FILE = APP_DIR.resolve("vault.dat");
@@ -61,7 +60,14 @@ public class StorageService {
     }
 
     public void save(List<PasswordEntry> entries) throws Exception {
-        backupExistingVault();
+        backupCurrentVault();
+        saveWithoutBackup(entries);
+    }
+
+    /**
+     * Saves the entries to disk WITHOUT creating a backup of the existing file first.
+     */
+    public void saveWithoutBackup(List<PasswordEntry> entries) throws Exception {
         String json = gson.toJson(entries);
         String encryptedData = cryptoService.encrypt(json);
 
@@ -73,12 +79,15 @@ public class StorageService {
         }
     }
 
-    private void backupExistingVault() {
+    /**
+     * Creates a timestamped backup of the current vault.dat.
+     */
+    public void backupCurrentVault() {
         if (Files.exists(VAULT_FILE)) {
             try {
                 Files.createDirectories(BACKUPS_DIR);
 
-                // Read the current vault to verify integrity and get password count
+                // Read the current vault to verify integrity and get count
                 String encryptedContent = Files.readString(VAULT_FILE);
                 int count = -1;
                 try {
