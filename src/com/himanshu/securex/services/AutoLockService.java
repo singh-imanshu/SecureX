@@ -8,7 +8,6 @@ import javafx.util.Duration;
 /**
  * A service that automatically triggers a lock action after a period of inactivity.
  * This helps mitigate opportunistic attempts to obtain credentials using physical access.
- * TODO: add an option for the user to be able to choose the timeout period.
  */
 public class AutoLockService {
 
@@ -46,48 +45,24 @@ public class AutoLockService {
             this.timeline = new Timeline(new KeyFrame(Duration.minutes(timeoutMinutes), e -> lock()));
             this.timeline.setCycleCount(1); // Run only once
         }
-	 }
+    }
 
-    /**
-     * Starts the inactivity timer if auto-lock is enabled.
-     */
     public void start() {
         if (isEnabled && timeline != null) {
             timeline.playFromStart();
         }
     }
 
-    /**
-     * Resets the inactivity timer if auto-lock is enabled.
-     * This should be called on any user interaction.
-     */
     public void reset() {
         if (isEnabled && timeline != null) {
             timeline.playFromStart();
         }
     }
 
-    /**
-     * Stops the timer.
-     */
     public void stop() {
         if (timeline != null) {
             timeline.stop();
         }
-    }
-
-    /**
-     * Returns whether auto-lock is currently enabled.
-     */
-    public boolean isEnabled() {
-        return isEnabled;
-    }
-
-    /**
-     * Returns the current timeout in minutes.
-     */
-    public int getTimeoutMinutes() {
-        return timeoutMinutes;
     }
 
     private void lock() {

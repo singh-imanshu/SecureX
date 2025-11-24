@@ -24,6 +24,7 @@ vault.dat
 out/
 
 ### Build Artifacts ###
+src/META-INF
 META-INF/
 
 ### Eclipse ###

@@ -1,6 +1,7 @@
 package com.himanshu.securex.controller;
 
 import com.himanshu.securex.auth.AuthManager;
+import com.himanshu.securex.services.SettingsService;
 import com.himanshu.securex.services.StorageService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -11,23 +12,37 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
-
-import java.util.Arrays;
+import java.util.*;
 
 public class SettingsController {
     private final Stage owner;
     private final StorageService storageService;
     private final DashboardController dashboardController;
+    private final SettingsService settingsService; // NEW
     private final AuthManager authManager;
 
     private Stage dialogStage;
+    private ChoiceBox<String> timeoutChoiceBox;
 
-    public SettingsController(Stage owner, StorageService storageService, DashboardController dashboardController) {
+    // Map display strings to minute values
+    private static final Map<String, Integer> TIMEOUT_OPTIONS = new LinkedHashMap<>();
+    static {
+        TIMEOUT_OPTIONS.put("1 Minute", 1);
+        TIMEOUT_OPTIONS.put("5 Minutes", 5);
+        TIMEOUT_OPTIONS.put("15 Minutes", 15);
+        TIMEOUT_OPTIONS.put("30 Minutes", 30);
+        TIMEOUT_OPTIONS.put("1 Hour", 60);
+        TIMEOUT_OPTIONS.put("Never", -1);
+    }
+
+    public SettingsController(Stage owner, StorageService storageService, DashboardController dashboardController, SettingsService settingsService) {
         this.owner = owner;
         this.storageService = storageService;
         this.dashboardController = dashboardController;
+        this.settingsService = settingsService;
         this.authManager = new AuthManager();
     }
 
@@ -35,7 +50,7 @@ public class SettingsController {
         if (dialogStage == null) {
             dialogStage = buildDialogStage();
         }
-        dialogStage.show(); // non-blocking
+        dialogStage.show();
         dialogStage.toFront();
     }
 
@@ -47,11 +62,46 @@ public class SettingsController {
         stage.setResizable(false);
 
         BorderPane root = new BorderPane();
-        root.setPadding(new Insets(12));
+        root.setPadding(new Insets(15));
 
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(12);
+        VBox contentBox = new VBox(20);
+
+        //Section 1: Security Preferences
+        TitledPane prefPane = new TitledPane();
+        prefPane.setText("Security Preferences");
+        prefPane.setCollapsible(false);
+
+        GridPane prefGrid = new GridPane();
+        prefGrid.setHgap(10);
+        prefGrid.setVgap(10);
+        prefGrid.setPadding(new Insets(10));
+
+        Label timeoutLabel = new Label("Auto-Lock Timeout:");
+        timeoutChoiceBox = new ChoiceBox<>();
+        timeoutChoiceBox.getItems().addAll(TIMEOUT_OPTIONS.keySet());
+
+        // Set current selection
+        int currentTimeout = settingsService.getAutoLockTimeout();
+        String currentKey = TIMEOUT_OPTIONS.entrySet().stream()
+                .filter(e -> e.getValue() == currentTimeout)
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse("5 Minutes");
+        timeoutChoiceBox.setValue(currentKey);
+
+        prefGrid.add(timeoutLabel, 0, 0);
+        prefGrid.add(timeoutChoiceBox, 1, 0);
+        prefPane.setContent(prefGrid);
+
+        //Section 2: Change Master Password
+        TitledPane passwordPane = new TitledPane();
+        passwordPane.setText("Change Master Password");
+        passwordPane.setCollapsible(false);
+
+        GridPane passGrid = new GridPane();
+        passGrid.setHgap(10);
+        passGrid.setVgap(12);
+        passGrid.setPadding(new Insets(10));
 
         PasswordField currentPassword = new PasswordField();
         currentPassword.setPromptText("Current master password");
@@ -60,20 +110,24 @@ public class SettingsController {
         PasswordField confirmPassword = new PasswordField();
         confirmPassword.setPromptText("Confirm new master password");
 
-        grid.add(new Label("Current Password:"), 0, 0);
-        grid.add(currentPassword, 1, 0);
-        grid.add(new Label("New Password:"), 0, 1);
-        grid.add(newPassword, 1, 1);
-        grid.add(new Label("Confirm Password:"), 0, 2);
-        grid.add(confirmPassword, 1, 2);
+        passGrid.add(new Label("Current Password:"), 0, 0);
+        passGrid.add(currentPassword, 1, 0);
+        passGrid.add(new Label("New Password:"), 0, 1);
+        passGrid.add(newPassword, 1, 1);
+        passGrid.add(new Label("Confirm:"), 0, 2);
+        passGrid.add(confirmPassword, 1, 2);
 
         ColumnConstraints c0 = new ColumnConstraints();
         c0.setPercentWidth(35);
         ColumnConstraints c1 = new ColumnConstraints();
         c1.setPercentWidth(65);
-        grid.getColumnConstraints().addAll(c0, c1);
+        passGrid.getColumnConstraints().addAll(c0, c1);
+        passwordPane.setContent(passGrid);
 
-        Button btnSave = new Button("Save");
+        contentBox.getChildren().addAll(prefPane, passwordPane);
+
+        //Buttons
+        Button btnSave = new Button("Save Changes");
         Button btnCancel = new Button("Cancel");
         HBox buttons = new HBox(10, btnCancel, btnSave);
         buttons.setAlignment(Pos.CENTER_RIGHT);
@@ -82,11 +136,20 @@ public class SettingsController {
         btnCancel.setOnAction(e -> stage.close());
 
         btnSave.setOnAction(e -> {
+            // 1. Save Preferences
+            String selectedKey = timeoutChoiceBox.getValue();
+            int newTimeout = TIMEOUT_OPTIONS.get(selectedKey);
+            settingsService.setAutoLockTimeout(newTimeout);
+            dashboardController.updateAutoLockTimeout(newTimeout);
+
+            // 2. Handle Password Change (if fields are filled)
             char[] oldPwd = currentPassword.getText().toCharArray();
             char[] newPwd = newPassword.getText().toCharArray();
             char[] confirmPwd = confirmPassword.getText().toCharArray();
 
-            try {
+            boolean passwordChangeRequested = oldPwd.length > 0 || newPwd.length > 0;
+
+            if (passwordChangeRequested) {
                 if (newPwd.length == 0) {
                     showAlert(Alert.AlertType.ERROR, "New password cannot be empty.");
                     return;
@@ -96,11 +159,11 @@ public class SettingsController {
                     return;
                 }
 
-                // Warn the user that all backups will be deleted if they proceed
+                // Logic from previous implementation
                 Alert confirm = new Alert(Alert.AlertType.WARNING);
                 confirm.setTitle("Confirm Password Change");
-                confirm.setHeaderText("Backups will be deleted");
-                confirm.setContentText("Changing your master password will permanently delete ALL existing backups.\nThis action cannot be undone.\n\nDo you want to continue?");
+                confirm.setHeaderText("Backups will be Re-encrypted");
+                confirm.setContentText("Changing your master password will re-encrypt your vault and backups.\nDo you want to continue?");
                 ButtonType proceed = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
                 ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
                 confirm.getButtonTypes().setAll(cancel, proceed);
@@ -108,29 +171,32 @@ public class SettingsController {
 
                 var result = confirm.showAndWait();
                 if (result.isEmpty() || result.get() != proceed) {
-                    return; // user canceled
+                    return;
                 }
 
-                // Use in-memory entries to avoid decrypting from disk
                 boolean ok = authManager.changeMasterPassword(oldPwd, newPwd, storageService, dashboardController.snapshotEntries());
                 dashboardController.onPasswordChanged(ok);
-                if (ok) {
-                    stage.close();
-                }
-            } finally {
-                Arrays.fill(oldPwd, '\0');
-                Arrays.fill(newPwd, '\0');
-                Arrays.fill(confirmPwd, '\0');
-                currentPassword.clear();
-                newPassword.clear();
-                confirmPassword.clear();
+                if (ok) stage.close();
+
+            } else {
+                // Only settings changed
+                stage.close();
+                showAlert(Alert.AlertType.INFORMATION, "Settings saved.");
             }
+
+            // Clean up
+            Arrays.fill(oldPwd, '\0');
+            Arrays.fill(newPwd, '\0');
+            Arrays.fill(confirmPwd, '\0');
+            currentPassword.clear();
+            newPassword.clear();
+            confirmPassword.clear();
         });
 
-        root.setCenter(grid);
+        root.setCenter(contentBox);
         root.setBottom(buttons);
 
-        Scene scene = new Scene(root, 420, 220);
+        Scene scene = new Scene(root, 450, 450);
         stage.setScene(scene);
         return stage;
     }
