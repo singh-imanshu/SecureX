@@ -23,6 +23,10 @@ vault.dat
 *.ipr
 out/
 
+### Build Artifacts ###
+src/META-INF
+META-INF/
+
 ### Eclipse ###
 .classpath
 .project
@@ -51,3 +55,5 @@ ehthumbs.db
 # Linux
 *~
 *.swp
+build.sh
+run.sh

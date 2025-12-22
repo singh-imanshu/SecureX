@@ -37,9 +37,21 @@ public class LoginController {
             }
 
             if (authManager.masterPasswordExists()) {
-                if (authManager.verifyPassword(pwd)) {
-                    // Pass the master password to the dashboard to unlock the vault.
-                    switchToDashboard(pwd);
+                // IMPORTANT: verify with a COPY because verifyPassword (and HashUtil.verifyPassword) zero the array
+                char[] pwdForVerify = Arrays.copyOf(pwd, pwd.length);
+                boolean ok = authManager.verifyPassword(pwdForVerify);
+                Arrays.fill(pwdForVerify, '\0'); // clear the verification copy promptly
+
+                if (ok) {
+                    // We need the salt to initialize the CryptoService for this session
+                    byte[] salt = authManager.getSalt();
+                    if (salt != null) {
+                        // Pass the ORIGINAL password array to construct the session key.
+                        // CryptoService will zero it; we also zero it after switching scenes.
+                        switchToDashboard(pwd, salt);
+                    } else {
+                        showAlert(Alert.AlertType.ERROR, "Could not retrieve salt for decryption.");
+                    }
                 } else {
                     showAlert(Alert.AlertType.ERROR, "Incorrect password");
                 }
@@ -51,6 +63,7 @@ public class LoginController {
                     showAlert(Alert.AlertType.ERROR, "Could not save master password. Check file permissions.");
                 }
             }
+            // Clear the original password after it's handed off
             Arrays.fill(pwd, '\0');
         });
 
@@ -61,8 +74,8 @@ public class LoginController {
         return view;
     }
 
-    private void switchToDashboard(char[] masterPassword) {
-        DashboardController dashboardController = new DashboardController(stage, masterPassword);
+    private void switchToDashboard(char[] masterPassword, byte[] salt) {
+        DashboardController dashboardController = new DashboardController(stage, masterPassword, salt);
         Scene dashboardScene = new Scene(dashboardController.getView(), 800, 600);
 
         stage.setTitle("SecureX - Dashboard");
