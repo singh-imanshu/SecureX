@@ -1,3 +1,6 @@
+# Maven bloat
+target/
+
 # Sensitive Data Files
 # These should never be committed to version control.
 master.dat
@@ -57,3 +60,4 @@ ehthumbs.db
 *.swp
 build.sh
 run.sh
+
