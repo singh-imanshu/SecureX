@@ -30,7 +30,7 @@ The project includes a Maven Wrapper, so you don't need Maven installed globally
 
 ```bash
 # Clone the repo
-git clone [https://github.com/singh-imanshu/SecureX.git](https://github.com/singh-imanshu/SecureX.git)
+git clone https://github.com/singh-imanshu/SecureX.git
 cd SecureX
 
 # Linux/Mac
