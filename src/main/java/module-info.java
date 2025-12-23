@@ -13,5 +13,8 @@ module com.himanshu.securex {
     opens com.himanshu.securex.controller to javafx.fxml;
     opens com.himanshu.securex.model to com.google.gson;
 
+    //System integration for opening URLs
+    requires java.desktop;
+
     exports com.himanshu.securex;
 }

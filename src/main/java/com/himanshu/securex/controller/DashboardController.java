@@ -11,13 +11,21 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.awt.*;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.List;
 
 public class DashboardController {
 
@@ -35,6 +43,7 @@ public class DashboardController {
     private TextField usernameField;
     private PasswordField passwordField;
     private TextField plainPasswordField;
+    private TextField urlField;
     private StackPane passwordContainer;
     private Label feedbackLabel;
 
@@ -260,10 +269,13 @@ public class DashboardController {
 
         accountField = new TextField();
         usernameField = new TextField();
+        urlField = new  TextField();
+        urlField.setPromptText("https://example.com");
 
         String defaultFocus = "-fx-focus-color: #0096C9; -fx-faint-focus-color: #0096C945;";
         accountField.setStyle(defaultFocus);
         usernameField.setStyle(defaultFocus);
+        urlField.setStyle(defaultFocus);
 
         createPasswordToggleField();
 
@@ -279,12 +291,20 @@ public class DashboardController {
         HBox passwordBox = new HBox(5, passwordContainer, copyPassButton, generateButton);
         HBox.setHgrow(passwordContainer, Priority.ALWAYS);
 
+        Button launchButton = new Button("↗");
+        launchButton.setTooltip(new Tooltip("Open Website"));
+        launchButton.setOnAction(e -> handleLaunchUrl());
+        HBox urlBox =  new HBox(5, urlField, launchButton);
+        HBox.setHgrow(urlField, Priority.ALWAYS);
+
         grid.add(new Label("Account:"), 0, 0);
         grid.add(accountField, 1, 0);
-        grid.add(new Label("Username:"), 0, 1);
-        grid.add(userBox, 1, 1);
-        grid.add(new Label("Password:"), 0, 2);
-        grid.add(passwordBox, 1, 2);
+        grid.add(new Label("URL:"), 0, 1); // New Row
+        grid.add(urlBox, 1, 1);
+        grid.add(new Label("Username:"), 0, 2);
+        grid.add(userBox, 1, 2);
+        grid.add(new Label("Password:"), 0, 3);
+        grid.add(passwordBox, 1, 3);
 
         feedbackLabel = new Label();
         feedbackLabel.setStyle("-fx-text-fill: green;");
@@ -377,25 +397,47 @@ public class DashboardController {
         accountField.requestFocus();
     }
 
+    private void handleLaunchUrl() {
+        String url = urlField.getText();
+        if (url == null || url.isEmpty()) return;
+
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://" + url;
+        }
+
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new URI(url));
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Opening browser is not supported on this platform.");
+            }
+        } catch (Exception e) {
+            showAlert(Alert.AlertType.ERROR, "Could not open link: " + e.getMessage());
+        }
+    }
+
     private void populateDetails(PasswordEntry entry) {
         accountField.setText(entry.getAccount());
         usernameField.setText(entry.getUsername());
         passwordField.setText(new String(entry.getPassword()));
+        urlField.setText(entry.getUrl() != null ? entry.getUrl() : "");
     }
 
     private void clearDetailsFields() {
         accountField.clear();
         usernameField.clear();
         passwordField.clear();
+        urlField.clear();
     }
 
     private void saveCurrentEntry() {
         String account = accountField.getText();
         String username = usernameField.getText();
         char[] password = passwordField.getText().toCharArray();
+        String url = urlField.getText();
 
         if (account.trim().isEmpty() || username.trim().isEmpty() || password.length == 0) {
-            showAlert(Alert.AlertType.ERROR, "All fields (Account, Username, Password) must be filled.");
+            showAlert(Alert.AlertType.ERROR, "Account, Username, and Password are required.");
             Arrays.fill(password, '\0');
             return;
         }
@@ -404,9 +446,10 @@ public class DashboardController {
             currentlySelectedEntry.setAccount(account);
             currentlySelectedEntry.setUsername(username);
             currentlySelectedEntry.setPassword(password);
+            currentlySelectedEntry.setUrl(url);
             entryListView.refresh();
         } else {
-            PasswordEntry newEntry = new PasswordEntry(account, username, password);
+            PasswordEntry newEntry = new PasswordEntry(account, username, password, url);
             passwordEntries.add(newEntry);
             entryListView.getSelectionModel().select(newEntry);
         }
@@ -478,7 +521,7 @@ public class DashboardController {
         List<PasswordEntry> copy = new ArrayList<>(passwordEntries.size());
         for (PasswordEntry e : passwordEntries) {
             char[] pwd = e.getPassword() != null ? Arrays.copyOf(e.getPassword(), e.getPassword().length) : new char[0];
-            copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd));
+            copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd, e.getUrl()));
             Arrays.fill(pwd, '\0');
         }
         return copy;

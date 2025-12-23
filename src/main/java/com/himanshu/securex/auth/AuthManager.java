@@ -137,7 +137,7 @@ public class AuthManager {
         List<PasswordEntry> copy = new ArrayList<>(source.size());
         for (PasswordEntry e : source) {
             char[] pwd = e.getPassword() != null ? Arrays.copyOf(e.getPassword(), e.getPassword().length) : new char[0];
-            copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd));
+            copy.add(new PasswordEntry(e.getAccount(), e.getUsername(), pwd, e.getUrl()));
             Arrays.fill(pwd, '\0');
         }
         return copy;
